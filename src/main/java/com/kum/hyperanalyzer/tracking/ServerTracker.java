@@ -69,6 +69,10 @@ public class ServerTracker {
                 lastTickTime = System.currentTimeMillis();
                 ZombiesDetector.onReconnect();
             }
+            
+            if ((isOnHypixel || isOnZombiesServer) && !ZombiesDetector.isInZombies) {
+                ZombiesDetector.scanForMidroundRejoin();
+            }
         }
 
         if (isOnHypixel || isOnZombiesServer) {

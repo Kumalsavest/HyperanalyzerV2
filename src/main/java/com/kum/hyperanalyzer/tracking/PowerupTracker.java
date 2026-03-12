@@ -99,14 +99,8 @@ public class PowerupTracker {
         // Once this expires, we lock the array to prevent Wave 2 contamination.
         if (r2Active && collectingR2Mobs) {
             wave1CollectionTicks++;
-            if (wave1CollectionTicks >= 200) {
+         if (wave1CollectionTicks >= 200) {
                 collectingR2Mobs = false;
-                net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getMinecraft();
-                if (mc != null && mc.thePlayer != null) {
-                    mc.thePlayer.addChatMessage(new net.minecraft.util.ChatComponentText(
-                        "\u00a78[Debug] \u00a77Wave 1 Collection Window Locked! Total: " + r2Wave1Mobs.size()
-                    ));
-                }
             }
         }
     }
@@ -116,13 +110,6 @@ public class PowerupTracker {
         resetR2State();
         r2Active         = true;
         collectingR2Mobs = true;
-        
-        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getMinecraft();
-        if (mc != null && mc.thePlayer != null && ZombiesDetector.currentGame != null) {
-            mc.thePlayer.addChatMessage(new net.minecraft.util.ChatComponentText(
-                "\u00a78[Debug] \u00a77R2 Started. (Double Gold Drops: " + ZombiesDetector.currentGame.doubleGoldCount + ")"
-            ));
-        }
     }
 
     // ── Called by ZombiesDetector.splitRound() when round becomes 3 ──────────
@@ -195,12 +182,6 @@ public class PowerupTracker {
             if (r2PowerupHolders.size() < 2) {
                 r2PowerupHolders.add(id);
             }
-            net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getMinecraft();
-            if (mc != null && mc.thePlayer != null) {
-                mc.thePlayer.addChatMessage(new net.minecraft.util.ChatComponentText(
-                    "\u00a78[Debug] \u00a77Tracked R2 Mob " + id + ". Total Wave 1 Mobs: " + r2Wave1Mobs.size()
-                ));
-            }
         }
     }
 
@@ -228,13 +209,6 @@ public class PowerupTracker {
         }
 
         if (tracked) {
-            net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getMinecraft();
-            if (mc != null && mc.thePlayer != null) {
-                mc.thePlayer.addChatMessage(new net.minecraft.util.ChatComponentText(
-                    "\u00a78[Debug] \u00a77R2 Mob Died! Wave 1: " + r2Wave1MobsDead.size() + "/" + r2Wave1Mobs.size() + 
-                    " | Holders: " + r2PowerupHoldersDead.size() + "/" + r2PowerupHolders.size()
-                ));
-            }
             checkR2MobsDead();
         }
     }
@@ -282,12 +256,6 @@ public class PowerupTracker {
         }
 
         if (ready) {
-            net.minecraft.client.Minecraft m = net.minecraft.client.Minecraft.getMinecraft();
-            if (m != null && m.thePlayer != null) {
-                m.thePlayer.addChatMessage(new net.minecraft.util.ChatComponentText(
-                    "\u00a78[Debug] \u00a77all tracked mobs dead, insta pattern: none, setting it automatically to R3"
-                ));
-            }
             resolveR2Outcome();
         }
     }

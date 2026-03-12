@@ -42,6 +42,37 @@ public class SessionManager {
         // Safety: GSON may deserialise a null games list from a malformed/empty file
         if (currentSession != null && currentSession.games == null)
             currentSession.games = new java.util.ArrayList<>();
+
+        // Clean up stale ongoing games from a previous Minecraft run.
+        // When the client restarts, any isOngoing=true games are orphans.
+        if (currentSession != null && currentSession.games != null) {
+            boolean dirty = false;
+            for (ZombiesGame g : currentSession.games) {
+                if (g.isOngoing) {
+                    g.isOngoing = false;
+                    g.isWin     = false;
+                    if (g.endTime <= 0) g.endTime = System.currentTimeMillis();
+                    if (g.duration <= 0) {
+                        long d = g.endTime - g.startTime;
+                        final long MAX_ORPHAN_MS = 10 * 60 * 1000L;
+                        g.duration = (d > 0 && d <= MAX_ORPHAN_MS) ? d : 0;
+                    }
+                    if (g.lastRound <= 0) g.lastRound = (g.rounds != null) ? g.rounds.size() : 1;
+
+                    // Apply reset rules: ≤10s or ≥5m22s
+                    boolean isReset = (g.duration <= 10_000L) || (g.duration >= 322_000L);
+                    g.isReset = isReset;
+                    if (isReset) {
+                        currentSession.zombiesGamesReset++;
+                    } else {
+                        currentSession.zombiesGamesTotal++;
+                        currentSession.zombiesGamesLost++;
+                    }
+                    dirty = true;
+                }
+            }
+            if (dirty) saveCurrentSession();
+        }
     }
 
     public static void saveCurrentSession() {

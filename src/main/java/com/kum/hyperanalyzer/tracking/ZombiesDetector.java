@@ -16,13 +16,19 @@ public class ZombiesDetector {
     public static int currentRound = 0;
     private static int difficultyCheckTick = 0;
     private static int keyPartCheckTick = 0;
+    // Tracks the Server ID of the last game that was properly ended (Game Over / Win).
+    // scanForMidroundRejoin() will skip this ID so it doesn't resurrect a finished game.
+    private static String lastEndedServerId = null;
 
-    // A game counts as a "reset" (not a real game) if it was round 1 and under this duration.
+    // A game counts as a "reset" (not a real game) if:
+    //   - duration ≤ 10s, OR
+    //   - duration ≥ 5m22s (322s) — lobby inflation / AFK
     // Also, if a round-1 game exceeds MAX_ROUND1_PLAY_MS we assume it includes lobby wait
     // time and cap it to RESET_CAP_MS so it doesn't show as a long fake game.
-    public static final long RESET_DURATION_MS  = 15_000L;   // ≤15s = reset
-    public static final long MAX_ROUND1_PLAY_MS = 330_000L;  // 5m30s = max believable round-1 real play
-    public static final long RESET_CAP_MS       = 10_000L;   // cap bogus round-1 durations to 10s
+    public static final long RESET_DURATION_MS      = 10_000L;   // ≤10s = reset
+    public static final long RESET_LONG_DURATION_MS  = 322_000L;  // ≥5m22s = reset (lobby inflation)
+    public static final long MAX_ROUND1_PLAY_MS     = 322_000L;  // 5m22s = max believable round-1 real play
+    public static final long RESET_CAP_MS           = 10_000L;   // cap bogus round-1 durations to 10s
 
     // Tick-based timing — matches ZombiesAutoSplits exactly (world ticks × 50ms)
     // gameStartTick: world tick when game started (or was rejoined at round 1)
@@ -363,37 +369,21 @@ public class ZombiesDetector {
         checkLeave();
     }
     
-    private static int debugPrintTick = 0;
     private static void checkServerId() {
-        debugPrintTick++;
-        boolean shouldDebug = (debugPrintTick % 100 == 0); // print every 5 seconds to avoid spam
         for (String line : ScoreboardManager.content) {
             String[] parts = line.trim().split("\\s+");
             
-            if (shouldDebug) {
-                net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getMinecraft();
-                if (mc != null && mc.thePlayer != null) {
-                    mc.thePlayer.addChatMessage(new net.minecraft.util.ChatComponentText(
-                        "\u00a78[Debug] \u00a77Scoreboard Line: " + line
-                    ));
-                }
-            }
-            
             if (parts.length >= 2) {
-                // Usually formatted like "03/11/26 m61BR"
                 String possibleDate = parts[0];
                 String potentialId = parts[parts.length - 1];
-                if ((possibleDate.contains("/") || possibleDate.contains("-")) && potentialId.matches("^[mM][a-zA-Z0-9]{3,7}$")) {
+                
+                // Hypixel attaches invisible unicode padding (\u200e, etc.) to the ends of lines.
+                // We MUST physically strip all non-alphanumeric characters before regex matching.
+                potentialId = potentialId.replaceAll("[^a-zA-Z0-9]", "");
+                
+                if ((possibleDate.contains("/") || possibleDate.contains("-")) && potentialId.matches("^[mM][a-zA-Z0-9]{2,7}$")) {
                     currentGame.serverId = potentialId;
                     SessionManager.saveCurrentSession();
-                    int gameNum = SessionManager.currentSession.games.size();
-                    
-                    net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getMinecraft();
-                    if (mc != null && mc.thePlayer != null) {
-                        mc.thePlayer.addChatMessage(new net.minecraft.util.ChatComponentText(
-                            "\u00a78[Debug] \u00a77Stored Server ID \u00a7a" + potentialId + "\u00a77 to Game Slot #" + gameNum
-                        ));
-                    }
                     return;
                 }
             }
@@ -508,13 +498,52 @@ public class ZombiesDetector {
         }
     }
 
-    /** Called on hard disconnect — mark current game as a loss but keep it flagged
-     *  as ongoing so that if the player reconnects at round > 1 it can be restored. */
+    public static void scanForMidroundRejoin() {
+        if (isInZombies) return; // already tracking formally
+        if (SessionManager.currentSession == null || SessionManager.currentSession.games == null) return;
+        
+        String currentServerId = null;
+        int detectedRound = 0;
+        
+        for (String line : ScoreboardManager.content) {
+            String clean = net.minecraft.util.StringUtils.stripControlCodes(line).trim();
+            String lower = clean.toLowerCase();
+            
+            if (lower.startsWith("round ")) {
+                detectedRound = extractNumber(lower);
+            }
+            
+            String[] parts = clean.split("\\s+");
+            if (parts.length >= 2) {
+                String possibleDate = parts[0];
+                String potentialId = parts[parts.length - 1].replaceAll("[^a-zA-Z0-9]", "");
+                if ((possibleDate.contains("/") || possibleDate.contains("-")) && potentialId.matches("^[mM][a-zA-Z0-9]{2,7}$")) {
+                    currentServerId = potentialId;
+                }
+            }
+        }
+        
+        if (currentServerId != null && detectedRound > 0) {
+            // Don't resurrect a game that was properly ended (Game Over / Win)
+            if (currentServerId.equals(lastEndedServerId)) return;
+            
+            for (ZombiesGame g : SessionManager.currentSession.games) {
+                // ONLY resurrect games still marked as ongoing (from a disconnect in THIS session).
+                // Games ended by startup cleanup or Game Over/Win are final.
+                if (g.isOngoing && currentServerId.equals(g.serverId)) {
+                    rejoinGame(detectedRound);
+                    return;
+                }
+            }
+        }
+    }
+
+    /** Called on hard disconnect or /leave — save the game as ongoing so it can
+     *  be resurrected within the same Minecraft session via scanForMidroundRejoin().
+     *  If the player never rejoins (or restarts MC), loadCurrentSession() cleanup
+     *  will properly end it on next startup. */
     public static void onDisconnect() {
         if (isInZombies && currentGame != null) {
-            // Keep the game in the session as ongoing — if the player reconnects at
-            // round > 1, rejoinGame() will pull it back out and continue tracking.
-            // If they never rejoin, it stays as an ongoing (unfinished) entry.
             currentGame.isOngoing = true;
             if (SessionManager.currentSession != null) {
                 if (SessionManager.currentSession.games == null)
@@ -522,9 +551,10 @@ public class ZombiesDetector {
                 SessionManager.currentSession.games.add(currentGame);
             }
             SessionManager.saveCurrentSession();
-            // Don't call endGame() here — leave currentGame intact for potential rejoin
+            PowerupTracker.onGameReset();
             isInZombies = false;
             currentGame = null;
+            currentRound = 0;
         }
         leaveTicks = 0;
         gameEndPending = false;
@@ -604,7 +634,10 @@ public class ZombiesDetector {
             if (parts.length >= 2) {
                 String possibleDate = parts[0];
                 String potentialId = parts[parts.length - 1];
-                if ((possibleDate.contains("/") || possibleDate.contains("-")) && potentialId.matches("^[mM][a-zA-Z0-9]{3,7}$")) {
+                // Clean invisible formatting 
+                potentialId = potentialId.replaceAll("[^a-zA-Z0-9]", "");
+                
+                if ((possibleDate.contains("/") || possibleDate.contains("-")) && potentialId.matches("^[mM][a-zA-Z0-9]{2,7}$")) {
                     currentServerId = potentialId;
                     break;
                 }
@@ -654,8 +687,8 @@ public class ZombiesDetector {
             currentGame.duration  = chosenMs;
             currentGame.lastRound = currentRound;
 
-            // Mark as reset if round 1 and ≤15s
-            boolean isReset = wasRound1 && chosenMs <= RESET_DURATION_MS;
+            // Mark as reset if ≤10s or ≥5m22s
+            boolean isReset = (chosenMs <= RESET_DURATION_MS) || (chosenMs >= RESET_LONG_DURATION_MS);
             currentGame.isReset = isReset;
 
             if (SessionManager.currentSession != null) {
@@ -695,6 +728,7 @@ public class ZombiesDetector {
 
         isInZombies    = true;
         gameEndPending = false;
+        lastEndedServerId = null; // Clear blacklist for the new game
         currentGame    = new ZombiesGame();
         currentGame.startTime  = System.currentTimeMillis();
         currentGame.map        = detectMap();
@@ -734,7 +768,10 @@ public class ZombiesDetector {
             if (parts.length >= 2) {
                 String possibleDate = parts[0];
                 String potentialId = parts[parts.length - 1];
-                if ((possibleDate.contains("/") || possibleDate.contains("-")) && potentialId.matches("^[mM][a-zA-Z0-9]{3,7}$")) {
+                // Clean invisible formatting
+                potentialId = potentialId.replaceAll("[^a-zA-Z0-9]", "");
+                
+                if ((possibleDate.contains("/") || possibleDate.contains("-")) && potentialId.matches("^[mM][a-zA-Z0-9]{2,7}$")) {
                     currentServerId = potentialId;
                     break;
                 }
@@ -750,10 +787,14 @@ public class ZombiesDetector {
                     ZombiesGame g = games.get(i);
                     if (currentServerId.equals(g.serverId)) {
                         rejoined = g;
-                        // Undo the "loss" marking if it was orphaned previously
-                        if (!rejoined.isOngoing && !rejoined.isWin && !rejoined.isReset) {
-                            SessionManager.currentSession.zombiesGamesLost = Math.max(0, SessionManager.currentSession.zombiesGamesLost - 1);
-                            SessionManager.currentSession.zombiesGamesTotal = Math.max(0, SessionManager.currentSession.zombiesGamesTotal - 1);
+                        // Undo the "loss" or "reset" marking if it was orphaned previously
+                        if (!rejoined.isOngoing && !rejoined.isWin) {
+                            if (rejoined.isReset) {
+                                SessionManager.currentSession.zombiesGamesReset = Math.max(0, SessionManager.currentSession.zombiesGamesReset - 1);
+                            } else {
+                                SessionManager.currentSession.zombiesGamesLost = Math.max(0, SessionManager.currentSession.zombiesGamesLost - 1);
+                                SessionManager.currentSession.zombiesGamesTotal = Math.max(0, SessionManager.currentSession.zombiesGamesTotal - 1);
+                            }
                         }
                         games.remove(i);
                         break;
@@ -782,6 +823,8 @@ public class ZombiesDetector {
             // Continue the existing game
             currentGame = rejoined;
             currentGame.isOngoing = true;
+            currentGame.isWin = false; // Just to be safe
+            currentGame.isReset = false; // We are rejoining it, so it's not a reset anymore
         } else {
             // No saved ongoing game — start fresh but at the current round
             currentGame            = new ZombiesGame();
@@ -790,7 +833,7 @@ public class ZombiesDetector {
             currentGame.isOngoing  = true;
             currentGame.difficulty = "Normal";
             currentGame.keyPart    = currentGame.map.equals("Prison") ? "Unidentified" : null;
-            }
+        }
 
         lastScoreboardTimeMs = 0;  // discard stale value
         currentRound         = round;
@@ -887,8 +930,8 @@ public class ZombiesDetector {
             currentGame.duration = RESET_CAP_MS;
         }
 
-        // Mark as reset if round 1 and ≤15s
-        boolean isResetGame = (currentRound <= 1) && (currentGame.duration <= RESET_DURATION_MS);
+        // Mark as reset if ≤10s or ≥5m22s
+        boolean isResetGame = (currentGame.duration <= RESET_DURATION_MS) || (currentGame.duration >= RESET_LONG_DURATION_MS);
         currentGame.isReset = isResetGame;
 
         if (SessionManager.currentSession != null) {
@@ -906,6 +949,10 @@ public class ZombiesDetector {
         SessionManager.saveCurrentSession();
 
         PowerupTracker.onGameReset();
+        // Blacklist this server ID so scanForMidroundRejoin won't resurrect it
+        if (currentGame != null && currentGame.serverId != null) {
+            lastEndedServerId = currentGame.serverId;
+        }
         isInZombies    = false;
         currentGame    = null;
         currentRound   = 0;
