@@ -1,0 +1,16 @@
+[
+{
+  "modid": "hyperanalyzer",
+  "name": "HyperAnalyzer",
+  "description": "Records Hypixel Zombies game sessions and statistics.",
+  "version": "${version}",
+  "mcversion": "${mcversion}",
+  "url": "",
+  "updateUrl": "",
+  "authorList": ["kum"],
+  "credits": "",
+  "logoFile": "",
+  "screenshots": [],
+  "dependencies": []
+}
+]

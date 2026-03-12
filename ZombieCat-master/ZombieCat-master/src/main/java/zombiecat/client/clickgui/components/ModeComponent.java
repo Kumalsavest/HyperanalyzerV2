@@ -1,0 +1,81 @@
+package zombiecat.client.clickgui.components;
+
+import java.awt.Color;
+import net.minecraft.client.Minecraft;
+import org.lwjgl.opengl.GL11;
+import zombiecat.client.clickgui.Component;
+import zombiecat.client.module.setting.impl.ComboSetting;
+
+public class ModeComponent implements Component {
+   private final int c = new Color(30, 144, 255).getRGB();
+   private final ComboSetting mode;
+   private final ModuleComponent module;
+   private int x;
+   private int y;
+   private int o;
+
+   public ModeComponent(ComboSetting desc, ModuleComponent b, int o) {
+      this.mode = desc;
+      this.module = b;
+      this.x = b.category.getX() + b.category.getWidth();
+      this.y = b.category.getY() + b.o;
+      this.o = o;
+   }
+
+   @Override
+   public void draw() {
+      GL11.glPushMatrix();
+      GL11.glScaled(0.5, 0.5, 0.5);
+      int bruhWidth = (int)((double)Minecraft.getMinecraft().fontRendererObj.getStringWidth(this.mode.getName() + ": ") * 0.5);
+      Minecraft.getMinecraft()
+         .fontRendererObj
+         .drawString(
+            this.mode.getName() + ": ", (float)((this.module.category.getX() + 4) * 2), (float)((this.module.category.getY() + this.o + 4) * 2), -1, true
+         );
+      Minecraft.getMinecraft()
+         .fontRendererObj
+         .drawString(
+            String.valueOf(this.mode.getMode()),
+            (float)((this.module.category.getX() + 4 + bruhWidth) * 2),
+            (float)((this.module.category.getY() + this.o + 4) * 2),
+            this.c,
+            true
+         );
+      GL11.glPopMatrix();
+   }
+
+   @Override
+   public void update(int mousePosX, int mousePosY) {
+      this.y = this.module.category.getY() + this.o;
+      this.x = this.module.category.getX();
+   }
+
+   @Override
+   public void setComponentStartAt(int n) {
+      this.o = n;
+   }
+
+   @Override
+   public int getHeight() {
+      return 0;
+   }
+
+   @Override
+   public void mouseDown(int x, int y, int b) {
+      if (this.i(x, y)) {
+         this.mode.nextMode();
+      }
+   }
+
+   @Override
+   public void mouseReleased(int x, int y, int m) {
+   }
+
+   @Override
+   public void keyTyped(char t, int k) {
+   }
+
+   private boolean i(int x, int y) {
+      return x > this.x && x < this.x + this.module.category.getWidth() && y > this.y && y < this.y + 11;
+   }
+}

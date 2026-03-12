@@ -1,0 +1,14 @@
+---
+description: Rebuild the mod after any code or config change
+alwaysApply: true
+---
+
+# Rebuild After Change
+
+After making **any** change to this ShowSpawnTime mod (Java, resources, config, or build config), **always** run the Gradle build so the user gets an updated JAR.
+
+- Use the project's Gradle wrapper from the workspace root.
+- On Windows: `.\gradlew.bat build` (or `Set-Location "workspace"; .\gradlew.bat build` if needed).
+- Prefer PowerShell: use `;` to chain commands, not `&&`.
+- Allow enough time for the build (e.g. 60–120 seconds).
+- After a successful build, mention that the mod was rebuilt and where the JAR is: `build\libs\ShowSpawnTime-<version>.jar`.

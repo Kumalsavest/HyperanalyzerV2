@@ -1,0 +1,15 @@
+[
+{
+  "modid": "zombiecat",
+  "name": "ZombieCat",
+  "description": "Zombies util for hypixel.",
+  "version": "1.7.5",
+  "url": "",
+  "updateUrl": "",
+  "authorList": ["KizuatoResu"],
+  "credits": "",
+  "logoFile": "",
+  "screenshots": [],
+  "dependencies": []
+}
+]

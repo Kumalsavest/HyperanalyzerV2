@@ -1,0 +1,24 @@
+{
+  "package": "zombiecat.client.mixins",
+  "refmap": "mixins.zombiecat.refmap.json",
+  "compatibilityLevel": "JAVA_8",
+  "verbose": true,
+  "client": [
+    "IC03PacketPlayer",
+    "IEntityPlayer",
+    "IKeyBinding",
+    "IMinecraft",
+    "MixinAbstractClientPlayer",
+    "MixinBlock",
+    "MixinEntityPlayer",
+    "MixinEntityPlayerSP",
+    "MixinEntityRenderer",
+    "MixinGuiNewChat",
+    "MixinItemRenderer",
+    "MixinModid",
+    "MixinNetworkManager"
+  ],
+  "mixins": [
+    "MixinEntity"
+  ]
+}

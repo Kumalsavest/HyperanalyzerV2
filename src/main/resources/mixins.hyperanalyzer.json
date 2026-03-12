@@ -1,0 +1,12 @@
+{
+  "package": "com.kum.hyperanalyzer.mixins",
+  "refmap": "mixins.hyperanalyzer.refmap.json",
+  "minVersion": "0.7.11",
+  "compatibilityLevel": "JAVA_8",
+  "verbose": true,
+  "mixins": [
+    "MixinGuiIngame",
+    "MixinNetHandlerPlayClient"
+  ],
+  "client": []
+}
