@@ -42,9 +42,12 @@ public class PowerupTracker {
     private static final Set<Integer> r2PowerupHolders     = new HashSet<>();
     private static final Set<Integer> r2PowerupHoldersDead = new HashSet<>();
     // True while we are in R2 and still collecting powerup-mob IDs.
-    // Stays true until the first mob death — at that point we lock the set.
     private static boolean collectingR2Mobs = false;
     private static int wave1CollectionTicks = 0;
+    
+    // True if a Double Gold armor stand was seen during R2 (meaning we expect 3 mobs).
+    private static boolean r2DoubleGoldSeen = false;
+    
     // True once R2 has started and we haven't yet resolved max/insta outcome.
     private static boolean r2Active = false;
 
@@ -152,11 +155,16 @@ public class PowerupTracker {
     private static void resetR2State() {
         r2Active         = false;
         collectingR2Mobs = false;
+        r2DoubleGoldSeen = false;
         wave1CollectionTicks = 0;
         r2Wave1Mobs.clear();
         r2Wave1MobsDead.clear();
         r2PowerupHolders.clear();
         r2PowerupHoldersDead.clear();
+    }
+
+    private static int getR2ExpectedPowerupHolders() {
+        return r2DoubleGoldSeen ? 3 : 2;
     }
 
     // ── Entity join: collect qualifying mobs during R2 collection window ──────
@@ -178,8 +186,8 @@ public class PowerupTracker {
 
         int id = mob.getEntityId();
         if (r2Wave1Mobs.add(id)) {
-            // The first 2 mobs which are the actual powerup holders
-            if (r2PowerupHolders.size() < 2) {
+            // Collect the predicted number of holders (2 or 3)
+            if (r2PowerupHolders.size() < getR2ExpectedPowerupHolders()) {
                 r2PowerupHolders.add(id);
             }
         }
@@ -244,16 +252,11 @@ public class PowerupTracker {
 
         if (ZombiesDetector.currentGame == null) return;
 
-        boolean requiresAllWave1 = ZombiesDetector.currentGame.doubleGoldCount > 0;
+        int target = getR2ExpectedPowerupHolders();
+        // If we haven't even collected the expected number of holders yet, wait.
+        if (r2PowerupHolders.size() < target) return;
 
-        boolean ready = false;
-        if (requiresAllWave1) {
-            // Must wait for all Wave 1 mobs
-            ready = (r2Wave1MobsDead.size() == r2Wave1Mobs.size());
-        } else {
-            // Only wait for the 2 powerup holders
-            ready = (r2PowerupHoldersDead.size() == r2PowerupHolders.size());
-        }
+        boolean ready = (r2PowerupHoldersDead.size() == r2PowerupHolders.size());
 
         if (ready) {
             resolveR2Outcome();
@@ -338,6 +341,12 @@ public class PowerupTracker {
 
         if (lower.contains("double gold")) {
             ZombiesDetector.currentGame.doubleGoldCount++;
+            int effectiveRound = resolveEffectiveRound(round);
+            if (r2Active && effectiveRound == 2) {
+                // This is the "R2 powerup fix" from github: if DG drops in R2,
+                // we must expect 3 mobs total for Wave 1.
+                r2DoubleGoldSeen = true;
+            }
             counted = true;
         } else if (lower.contains("bonus gold") && "Alien Arcadium".equals(map)) {
             ZombiesDetector.currentGame.bonusGoldCount++;
